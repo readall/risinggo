@@ -1,1 +1,1 @@
-Full k6 JavaScript load test script
+Updated k6 script with separated performance and functional sections

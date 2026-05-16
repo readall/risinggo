@@ -1,1 +1,1 @@
-Full README for k6 harness
+Updated README explaining the separation
