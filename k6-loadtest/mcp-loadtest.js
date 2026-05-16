@@ -1,1 +1,1 @@
-Updated k6 script with separated performance and functional sections
+Updated with more rejection and schema variation scenarios

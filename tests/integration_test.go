@@ -1,0 +1,1 @@
+Integration test skeleton with testcontainers
