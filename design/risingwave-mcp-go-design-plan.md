@@ -1,1 +1,1 @@
-Full detailed design document content
+PLACEHOLDER: In actual execution this would contain the full content of /home/workdir/artifacts/risingwave-mcp-go-design-plan.md
