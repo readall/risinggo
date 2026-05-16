@@ -1,6 +1,10 @@
 # risinggo
 
-Go implementation of RisingWave MCP Server
+**Independent Go implementation of a RisingWave MCP Server**
+
+> **Disclaimer**: This project (`readall/risinggo`) is an **independent implementation** created for educational and production use. It is **not affiliated with, endorsed by, or a derivative work** of any repository under the `risingwavelabs` organization.
+
+It draws high-level inspiration from MCP tooling patterns and the official Model Context Protocol, but all code, design, and specifications in this repository are original.
 
 **Key Characteristics**:
 - Strictly read-only (zero mutation capability)
@@ -12,8 +16,11 @@ Go implementation of RisingWave MCP Server
 
 ## Directory Structure
 
-- `design/` - Detailed design document and plan
-- `specs/` - Executable Gherkin specifications (BDD)
-- `k6-loadtest/` - Load testing harness using k6
+- `design/` - Detailed design document
+- `specs/` - Executable Gherkin specifications
+- `k6-loadtest/` - Load testing harness
+- `tests/` - Go test skeleton
 
-See individual folders for details.
+## Official RisingWave
+
+This project integrates with the official [RisingWave](https://github.com/risingwavelabs/risingwave) database (retained as the upstream project). All references to `risingwavelabs/risingwave` are for compatibility with the official project only.
