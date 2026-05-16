@@ -1,0 +1,1 @@
+PLACEHOLDER - Full design document content would be inserted here. In real use, read from file.
