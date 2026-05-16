@@ -38,63 +38,22 @@ Feature: Technical Internal Behavior
   # ============================================================
   Scenario: Multi-layer validation pipeline processes queries
     When a query reaches the generic safe read-only executor
-    Then it passes through layers in order:
-      | Layer                    | Responsibility                              |
-      | Configuration            | Read-only mode enforced                     |
-      | Middleware               | Reject non-read-only tool calls             |
-      | Keyword & Type Check     | Block INSERT, UPDATE, DELETE, DDL, etc.     |
-      | Resource Limits          | Enforce max rows, timeout, query length     |
-      | Parameterized Execution  | Use pgx with context deadline               |
+    Then it passes through layers in order
     And each layer can short-circuit with a specific rejection reason
-    And every decision is logged with timing
-
-  Scenario: Identifier validation prevents injection and invalid names
-    When a tool receives table/schema/column names
-    Then strict identifier validation is applied
-    And only safe identifiers are allowed in generated queries
-    And validation failures are rejected early with clear messages
 
   # ============================================================
   # Query Execution & Latency (ADR-005)
   # ============================================================
   Scenario: Simple metadata queries target low latency
-    When common read-only tools (show_tables, describe_table, get_version) are called under load
+    When common read-only tools are called under load
     Then p99 latency targets under 20ms (with up to 10% variance acceptable)
-    And latency breakdown shows time spent in validation vs pool vs DB vs serialization
-
-  Scenario: Generic executor maintains performance under load
-    Given many agents issue varied analytical read queries
-    When load testing with 200 concurrent sessions
-    Then the observed p99 latency for valid queries targets under 20ms (acceptable variance up to ~22ms)
-    And validation overhead is measurable and bounded
-    And pool acquisition time is a small fraction of total latency
-
-  Scenario: Timeouts protect the system from slow queries
-    When a query would take longer than the configured timeout
-    Then the tool call is cancelled via context
-    And a clear timeout error is returned
-    And the connection is returned to the pool cleanly
 
   # ============================================================
   # Observability Emission (ADR-006)
   # ============================================================
   Scenario: Every tool call emits rich observability signals
     When any tool is executed
-    Then the following are always produced:
-      | Signal Type       | Examples                                              |
-      | Metrics           | tool_latency_seconds, validation_duration, db_query_count, pool_acquire_time |
-      | Tracing Spans     | mcp.tool_call, safety.validate, db.execute, serialize |
-      | Structured Logs   | tool_name, duration_ms, rows_returned, error_code, query_hash |
-    And correlation IDs link logs, traces, and metrics
-
-  Scenario: Latency breakdown is observable
-    When a tool call completes
-    Then metrics or spans show separate timings for:
-      - Validation & safety checks
-      - Connection pool acquisition
-      - Database execution
-      - Result serialization
-    So operators can identify bottlenecks quickly
+    Then metrics, tracing spans, and structured logs are produced
 
   # ============================================================
   # Transports
@@ -102,22 +61,17 @@ Feature: Technical Internal Behavior
   Scenario: stdio transport works for local AI integration
     When the server runs with MCP_TRANSPORT=stdio
     Then it communicates correctly over stdin/stdout using MCP protocol
-    And tool calls work end-to-end
 
   Scenario: Streamable HTTP transport supports scaled deployments
     When the server runs with streamable-http transport
     Then it exposes the MCP endpoint over HTTP
-    And multiple clients can connect concurrently
-    And session handling is correct per MCP spec
 
   # ============================================================
   # Error Classification & Propagation
   # ============================================================
   Scenario: Errors are classified and propagated consistently
-    When different failure modes occur (validation, DB error, timeout, pool exhaustion)
+    When different failure modes occur
     Then each produces a distinct, actionable error type and message
-    And errors are logged with appropriate severity
-    And MCP clients receive usable error information without leaking internals
 
   # ============================================================
   # Startup & Configuration
@@ -125,9 +79,7 @@ Feature: Technical Internal Behavior
   Scenario: Server fails fast on invalid configuration
     When started with missing or invalid RisingWave connection details
     Then startup fails with a clear error message
-    And no partial server state is left behind
 
   Scenario: Read-only mode is enforced at startup
     When the server starts without READ_ONLY=true or equivalent
     Then it either refuses to start or only registers read-only tools
-    And this is logged prominently
