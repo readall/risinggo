@@ -1,0 +1,1 @@
+Full k6 JavaScript load test script

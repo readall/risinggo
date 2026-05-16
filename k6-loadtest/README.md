@@ -1,0 +1,1 @@
+Full README for k6 harness
