@@ -1,0 +1,3 @@
+WARNING: Server running in READ-ONLY mode - no mutations allowed
+Starting MCP server with streamable-http transport on port 8000
+Server error: listen tcp :8000: bind: address already in use

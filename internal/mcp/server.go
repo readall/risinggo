@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/readall/risinggo/internal/config"
@@ -36,6 +37,10 @@ func NewServer(cfg *config.Config, pool *db.Pool) *Server {
 			Name:    "risingwave-mcp-server",
 			Version: "0.1.0",
 		}, nil),
+	}
+	// Handle initialization notification
+	s.mcpServer.InitializedHandler = func(ctx context.Context, req *mcp.InitializedRequest) {
+		// Initialization complete, no action needed
 	}
 	s.registerTools()
 	return s
@@ -224,6 +229,19 @@ func (s *Server) rowsToResult(rows *db.PgxRows) (string, error) {
 }
 
 func (s *Server) Start() error {
+	if s.config.Transport == "streamable-http" {
+		fmt.Printf("Starting MCP server with streamable-http transport on port %d\n", s.config.HttpPort)
+		
+		// Create handler for streamable HTTP transport
+		handler := mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
+			return s.mcpServer
+		}, nil)
+		
+		// Start HTTP server
+		addr := fmt.Sprintf(":%d", s.config.HttpPort)
+		return http.ListenAndServe(addr, handler)
+	}
+	
 	fmt.Println("Starting MCP server with stdio transport")
 	return s.mcpServer.Run(context.Background(), &mcp.StdioTransport{})
 }

@@ -61,12 +61,81 @@ const malformedPayloads = [
 ];
 
 // ============================================================
+// Setup: Initialize MCP session per VU
+// ============================================================
+export function setup() {
+  const baseUrl = __ENV.MCP_BASE_URL || 'http://localhost:8000';
+  const endpoint = `${baseUrl}/mcp`;
+
+  // Step 1: Send initialize
+  const initResp = http.post(endpoint, JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-06-18",
+      capabilities: { tools: {} },
+      clientInfo: { name: "k6-test-client", version: "1.0.0" }
+    }
+  }), { 
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': '*/*'
+    } 
+  });
+
+  // Debug: print all headers
+  console.log(`Initialize response status: ${initResp.status}`);
+  console.log(`Initialize response headers: ${JSON.stringify(initResp.headers)}`);
+  
+  // Extract session ID from headers - try different case variations
+  let sessionId = null;
+  const possibleHeaders = ['Mcp-Session-Id', 'mcp-session-id', 'MCP-SESSION-ID'];
+  for (const header of possibleHeaders) {
+    if (initResp.headers[header]) {
+      sessionId = initResp.headers[header];
+      console.log(`Found session ID in header ${header}: ${sessionId}`);
+      break;
+    }
+  }
+  
+  if (!sessionId) {
+    throw new Error(`No session ID in initialize response. Headers: ${JSON.stringify(initResp.headers)}`);
+  }
+
+  // Step 2: Send initialized notification (no response expected)
+  const initializedResp = http.post(endpoint, JSON.stringify({
+    jsonrpc: "2.0",
+    method: "notifications/initialized"
+  }), { 
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': '*/*',
+      'Mcp-Session-Id': sessionId
+    }
+  });
+
+  console.log(`Initialized notification status: ${initializedResp.status}`);
+
+  return { endpoint, sessionId };
+}
+
+// ============================================================
 // Helpers
 // ============================================================
-function callTool(toolName, args = {}) {
-  const payload = { jsonrpc: "2.0", id: Date.now(), method: "tools/call", params: { name: toolName, arguments: args } };
-  const res = http.post(MCP_ENDPOINT, JSON.stringify(payload), {
-    headers: { 'Content-Type': 'application/json' },
+function callTool(endpoint, sessionId, toolName, args = {}) {
+  const payload = { 
+    jsonrpc: "2.0", 
+    id: Date.now(), 
+    method: "tools/call", 
+    params: { name: toolName, arguments: args } 
+  };
+  const res = http.post(endpoint, JSON.stringify(payload), {
+    headers: { 
+      'Content-Type': 'application/json',
+      'Accept': '*/*',
+      'Mcp-Session-Id': sessionId
+    },
     tags: { tool: toolName },
   });
 
@@ -79,64 +148,78 @@ function callTool(toolName, args = {}) {
   return res;
 }
 
-function injectChaos() {
+function injectChaos(endpoint, sessionId) {
   chaosInjections.add(1);
 
   // 1. Send dangerous query
   if (Math.random() < 0.6) {
     const badQuery = dangerousQueries[Math.floor(Math.random() * dangerousQueries.length)];
-    callTool('execute_safe_read_query', { query: badQuery });
+    callTool(endpoint, sessionId, 'execute_safe_read_query', { query: badQuery });
   }
 
   // 2. Send malformed JSON-RPC
   if (Math.random() < 0.3) {
     const badPayload = malformedPayloads[Math.floor(Math.random() * malformedPayloads.length)];
-    http.post(MCP_ENDPOINT, JSON.stringify(badPayload), {
-      headers: { 'Content-Type': 'application/json' },
+    http.post(endpoint, JSON.stringify(badPayload), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Mcp-Session-Id': sessionId
+      },
       tags: { tool: 'chaos_malformed' },
     });
   }
 
   // 3. Rapid invalid tool call
   if (Math.random() < 0.2) {
-    callTool('non_existent_tool', { foo: 'bar' });
+    callTool(endpoint, sessionId, 'non_existent_tool', { foo: 'bar' });
   }
 }
 
 // ============================================================
 // Main
 // ============================================================
-export default function () {
+export default function (data) {
+  const { endpoint, sessionId } = data;
   const rand = Math.random();
 
   // === Normal Performance Path ===
   if (!CHAOS_MODE) {
     if (rand < 0.4) {
-      callTool('execute_safe_read_query', { query: sampleQueries[Math.floor(Math.random() * sampleQueries.length)] });
+      callTool(endpoint, sessionId, 'execute_safe_read_query', { query: sampleQueries[Math.floor(Math.random() * sampleQueries.length)] });
     } else if (rand < 0.6) {
-      callTool('show_tables', {});
+      callTool(endpoint, sessionId, 'show_tables', {});
     } else {
-      callTool('list_streaming_jobs', {});
+      callTool(endpoint, sessionId, 'list_streaming_jobs', {});
     }
   }
 
   // === Chaos Injection Mode ===
   if (CHAOS_MODE && Math.random() < 0.7) {
-    injectChaos();
+    injectChaos(endpoint, sessionId);
   }
 
   // === Functional Coverage (always run) ===
-  if (Math.random() < 0.12) callTool('describe_table', { table_name: 'orders' });
-  if (Math.random() < 0.08) callTool('list_materialized_views', {});
+  if (Math.random() < 0.12) {
+    callTool(endpoint, sessionId, 'describe_table', { table_name: 'orders' });
+  }
+  if (Math.random() < 0.08) {
+    callTool(endpoint, sessionId, 'list_streaming_jobs', {}); // Changed from list_materialized_views
+  }
 
   if (!CHAOS_MODE && Math.random() < 0.10) {
     const bad = dangerousQueries[Math.floor(Math.random() * dangerousQueries.length)];
-    callTool('execute_safe_read_query', { query: bad });
+    callTool(endpoint, sessionId, 'execute_safe_read_query', { query: bad });
   }
 
   if (Math.random() < 0.05) {
-    http.post(MCP_ENDPOINT, JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/list" }), {
-      headers: { 'Content-Type': 'application/json' }, tags: { tool: 'tools_list' }
+    http.post(endpoint, JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "tools/list" }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': '*/*',
+        'Mcp-Session-Id': sessionId
+      },
+      tags: { tool: 'tools_list' }
     });
   }
 
