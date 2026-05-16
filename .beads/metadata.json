@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "risinggo",
+  "project_id": "c0cdc9c9-58f8-4da1-b0ae-f84d712275b1"
+}
