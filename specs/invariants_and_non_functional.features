@@ -1,1 +1,121 @@
-Full content of invariants_and_non_functional.features with p99 target
+# language: en
+Feature: Invariants and Non-Functional Requirements
+
+  As an architect, security engineer, and performance engineer
+  I want strong guarantees on safety, performance, scalability, and observability
+  So that the system can be trusted in production with AI agents at scale
+
+  # ============================================================
+  # Core Safety Invariant (ADR-001)
+  # ============================================================
+  Feature: Strict Read-Only Invariant — No Destruction Possible
+
+    Scenario: The server can never perform or allow mutations
+      Given the server is running in any valid configuration
+      When any attempt is made to execute DDL, DML, or other mutating statements
+        (via dedicated tools or the generic executor)
+      Then the attempt is rejected at one or more layers
+      And the RisingWave database state is never modified by this server
+      And this holds true across restarts, configuration changes, and error conditions
+
+    Scenario: Read-only posture is enforced even if misconfigured
+      When an operator attempts to start the server without read-only safeguards
+      Then either startup is prevented or only read-only tools are registered
+      And a prominent warning is logged
+
+    Scenario Outline: All public tools remain read-only by declaration and enforcement
+      When the list of tools is inspected
+      Then every tool declares ReadOnlyHint = true
+      And no tool description or schema suggests mutation capability
+
+  # ============================================================
+  # Performance Target (ADR-005) — Measurable with 10% Variance
+  # ============================================================
+  Feature: Performance — p99 Latency Target (< 20ms target with 10% variance)
+
+    Scenario: The system provides measurement capabilities for p99 latency
+      Given the server has detailed observability enabled (per-layer metrics and tracing)
+      Then it is possible to measure and report p99 end-to-end tool latency for any tool or the generic executor
+      And latency breakdown (validation, pool acquire, DB execution, serialization) is available
+
+    Scenario: Common read operations target p99 latency under 20ms with acceptable variance
+      Given the server is deployed according to documented low-latency assumptions to RisingWave
+      And load testing is performed with 200 concurrent sessions using typical read/metadata/monitoring queries
+      When p99 latency is measured over a representative window
+      Then the observed p99 **targets less than 20 milliseconds**
+      And variance of up to **10% is acceptable** (observed p99 up to approximately 22ms remains within tolerance)
+      And this is treated as a **measurable continuous improvement target** tracked via observability rather than a strict binary gate
+
+    Scenario: Latency breakdown enables targeted optimization
+      When any tool call completes
+      Then the observability system provides measurable breakdown of time spent in:
+        - Safety/validation checks
+        - Connection pool acquisition
+        - Database execution
+        - Result handling and serialization
+      So operators and engineers can identify bottlenecks and drive toward the p99 target
+
+    Scenario: Performance remains stable under sustained concurrent load
+      Given sustained load from many agents (targeting 200 concurrent sessions) over an extended period
+      When monitoring p99 latency trends
+      Then degradation significantly beyond the 10% variance tolerance produces observable signals (metrics and logs)
+      And the system does not exhibit unbounded latency growth
+
+  # ============================================================
+  # Scalability
+  # ============================================================
+  Scenario: Server supports 200+ concurrent long-lived MCP sessions
+    Given the server is running with appropriate pool sizing and resources
+    When 200+ MCP clients maintain long-lived connections (stdio or HTTP)
+    Then all clients can successfully call tools
+    And resource usage (memory, goroutines, file descriptors) remains reasonable
+    And horizontal scaling via additional replicas is possible due to stateless design
+
+  # ============================================================
+  # Observability Invariant (ADR-006)
+  # ============================================================
+  Scenario: Detailed observability is always active and comprehensive
+    Given the server is running
+    Then the following observability is always emitted:
+      | Category     | Requirement                                      |
+      | Metrics      | Per-tool latency, validation time, pool stats, error rates |
+      | Tracing      | Spans covering the full request lifecycle        |
+      | Logging      | Structured logs with correlation and key fields  |
+    And there is no way to disable core observability in production builds
+
+  Scenario: Observability enables root-cause analysis of latency and errors
+    When investigating a slow or failing tool call
+    Then an operator can trace the exact path and time spent in each layer
+    And correlate logs, traces, and metrics using correlation IDs
+
+  # ============================================================
+  # Security & Reliability Invariants
+  # ============================================================
+  Scenario: Input is always validated and parameterized
+    When any user-controlled input reaches query construction or execution
+    Then it is validated and queries are built using parameterized statements via pgx
+    And no string concatenation of untrusted input into SQL occurs
+
+  Scenario: The server fails safely under resource pressure
+    When memory, goroutines, or connections are exhausted
+    Then the server degrades gracefully (rejects new work with clear errors)
+    And does not crash or corrupt state
+
+  Scenario: All error paths preserve safety and observability
+    When any error occurs (validation, DB, timeout, etc.)
+    Then safety invariants are never violated
+    And the error is logged and metered appropriately
+    And clients receive actionable information without internal leakage
+
+  # ============================================================
+  # Configuration & Deployment Invariants
+  # ============================================================
+  Scenario: Production deployment requires explicit read-only confirmation
+    When deploying via Docker/Kubernetes
+    Then read-only mode and observability must be explicitly configured
+    And sane secure defaults are applied where possible
+
+  Scenario: The implementation remains stateless for horizontal scaling
+    Given multiple replicas are running behind a load balancer
+    Then any replica can handle any request (no session affinity required for correctness)
+    And scaling up/down does not cause inconsistency
