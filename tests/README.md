@@ -1,1 +1,1 @@
-Go test skeleton documentation
+Full tests README

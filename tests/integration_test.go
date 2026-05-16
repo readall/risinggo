@@ -1,1 +1,1 @@
-Integration test skeleton with testcontainers
+Full integration_test.go content

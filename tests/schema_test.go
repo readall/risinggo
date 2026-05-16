@@ -1,1 +1,1 @@
-Schema tool tests
+Full schema_test.go content
