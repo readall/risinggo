@@ -65,6 +65,14 @@ func (s *Server) registerTools() {
 			ReadOnlyHint: true,
 		},
 	}, s.handleDescribeTable)
+
+	mcp.AddTool(s.mcpServer, &mcp.Tool{
+		Name:        "list_streaming_jobs",
+		Description: "List active streaming jobs (materialized views) in RisingWave",
+		Annotations: &mcp.ToolAnnotations{
+			ReadOnlyHint: true,
+		},
+	}, s.handleListStreamingJobs)
 }
 
 func (s *Server) handleExecuteQuery(ctx context.Context, req *mcp.CallToolRequest, args ExecuteQueryArgs) (*mcp.CallToolResult, any, error) {
@@ -142,6 +150,30 @@ func (s *Server) handleDescribeTable(ctx context.Context, req *mcp.CallToolReque
 	rows, err := s.pool.Query(ctx, query, schema, tableName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to describe table: %w", err)
+	}
+	defer rows.Close()
+
+	result, _ := s.rowsToResult(rows)
+
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: result},
+		},
+	}, nil, nil
+}
+
+func (s *Server) handleListStreamingJobs(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
+	query := `SELECT 
+				mview_name as name,
+				schema_name,
+				is_materialized,
+				create_time
+			FROM rw_catalog.materialized_views
+			ORDER BY schema_name, mview_name`
+
+	rows, err := s.pool.Query(ctx, query)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list streaming jobs: %w", err)
 	}
 	defer rows.Close()
 
