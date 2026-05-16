@@ -1,1 +1,1 @@
-Full coverage analysis with traceability matrix
+Full content of original-behavior-coverage.md with traceability matrix

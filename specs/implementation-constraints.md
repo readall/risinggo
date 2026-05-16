@@ -1,1 +1,1 @@
-Full implementation constraints and ADRs document
+Full content of implementation-constraints.md with ADRs
