@@ -1,1 +1,1 @@
-Full invariants Gherkin with strict read-only, p99 target with 10% variance, and observability requirements
+Full invariants and non-functional Gherkin with p99 target and variance
