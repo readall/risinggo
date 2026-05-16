@@ -1,1 +1,1 @@
-Full updated k6 load test script with separated performance and functional scenarios
+Complete k6 script with separated Performance/P99 section and expanded Functional Coverage scenarios including multiple rejection test cases

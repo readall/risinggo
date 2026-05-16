@@ -1,1 +1,1 @@
-Full k6 README explaining separation and usage
+Complete k6 README explaining the separation of performance and functional scenarios and how to interpret results
