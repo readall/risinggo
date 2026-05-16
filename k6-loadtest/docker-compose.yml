@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  risingwave:
+    image: risingwavelabs/risingwave:latest   # Official RisingWave database (upstream)
+    command: playground
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "4566", "-U", "root"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mcp-server:
+    # Build your own image from this repository
+    build: .
+    # Or use your published image, e.g.:
+    # image: ghcr.io/readall/risinggo:latest
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_PORT: 8000
+      RISINGWAVE_CONNECTION_STR: "postgresql://root:root@risingwave:4566/dev"
+    ports:
+      - "8000:8000"
+    depends_on:
+      risingwave:
+        condition: service_healthy
+
+  # Example: Run k6 from host or another container
+  # docker compose run k6 run /scripts/mcp-loadtest.js
