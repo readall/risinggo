@@ -1,1 +1,117 @@
-Full public_api.features Gherkin content
+# language: en
+Feature: Public MCP API Surface (Strictly Read-Only)
+
+  As an AI agent or developer using MCP clients (Claude, VS Code Copilot, etc.)
+  I want to discover and call a rich set of read-only tools against RisingWave
+  So that I can safely inspect, monitor, and analyze the streaming database without any risk of modification
+
+  Background:
+    Given the RisingWave MCP Server is running in read-only mode
+    And it is connected to a healthy RisingWave instance
+    And the server exposes tools via stdio or Streamable HTTP transport
+
+  # ============================================================
+  # Tool Discovery
+  # ============================================================
+  Scenario: Agent discovers all available read-only tools
+    When the MCP client requests the list of tools
+    Then the server returns a list of tools
+    And every tool has a clear name, description, and input schema
+    And no tool has any mutating capability (all declare ReadOnlyHint = true)
+    And the list includes at minimum:
+      | category                  | example tools                          |
+      | Query & Generic Executor  | run_select_query, execute_safe_read_query |
+      | Explain                   | explain_query, explain_analyze         |
+      | Schema                    | show_tables, describe_table, list_materialized_views |
+      | Streaming Monitoring      | list_streaming_jobs, get_backfill_progress |
+      | Storage                   | get_hummock_stats, list_compaction     |
+      | Cluster & Management      | get_cluster_info, get_version          |
+    And the powerful generic tool "execute_safe_read_query" is present with rich description of its safeguards
+
+  # ============================================================
+  # Safe Query Execution
+  # ============================================================
+  Scenario: Agent executes a simple safe SELECT query via dedicated tool
+    Given a table "orders" exists with sample data
+    When the agent calls "run_select_query" with query "SELECT * FROM orders LIMIT 10"
+    Then the tool succeeds
+    And returns results as structured data or JSON
+    And the response includes execution metadata (rows returned, duration)
+    And the query was executed using a pooled connection with timeout
+
+  Scenario: Agent uses the powerful generic safe read-only executor
+    When the agent calls "execute_safe_read_query" with a complex analytical query
+    Then the query is validated through all safety layers
+    And if valid, it executes successfully
+    And the result includes timing breakdown if observability is enabled
+    And the full query (or hash) is logged for audit
+
+  Scenario Outline: Generic executor rejects dangerous or invalid queries
+    When the agent calls "execute_safe_read_query" with query "<query>"
+    Then the tool rejects the request with a clear, actionable error
+    And the rejection reason indicates which safety layer caught it
+    And no query is sent to RisingWave
+    And the rejection is logged with context
+
+    Examples:
+      | query                                      | expected rejection reason      |
+      | INSERT INTO orders VALUES (1)              | Mutation keyword detected      |
+      | DROP TABLE orders                          | Mutation keyword detected      |
+      | CREATE MATERIALIZED VIEW ...               | Mutation keyword detected      |
+      | SELECT * FROM orders; DROP TABLE users     | Multiple statements or dangerous pattern |
+      | UPDATE orders SET amount = 0               | Mutation keyword detected      |
+      | DELETE FROM orders                         | Mutation keyword detected      |
+      | GRANT ALL ON orders TO public              | Mutation keyword detected      |
+      | SELECT pg_sleep(100)                       | Resource limit or unsafe function |
+
+  # ============================================================
+  # Schema & Introspection Tools
+  # ============================================================
+  Scenario: Agent inspects schema and metadata safely
+    When the agent calls schema tools (show_tables, describe_table, list_materialized_views, etc.)
+    Then all calls succeed
+    And return accurate current state from RisingWave catalog
+    And no side effects occur on the database
+
+  # ============================================================
+  # Monitoring & Observability Tools
+  # ============================================================
+  Scenario: Agent monitors streaming jobs and storage
+    When the agent calls monitoring tools (list_streaming_jobs, get_backfill_progress, get_hummock_stats)
+    Then the tools return live information from RisingWave
+    And the data helps the agent understand system health without any modification risk
+
+  # ============================================================
+  # Error Handling & Agent Experience
+  # ============================================================
+  Scenario: Agent receives helpful errors for invalid inputs
+    When the agent calls a tool with invalid parameters
+    Then the server returns a clear, structured error
+    And the error message helps the agent correct its request
+    And the error is classified (validation, execution, timeout, etc.)
+
+  Scenario: Agent experiences consistent behavior across transports
+    Given the server is running
+    When the same tool is called via stdio and via Streamable HTTP
+    Then both calls produce equivalent successful or error results
+    And latency characteristics are documented per transport
+
+  # ============================================================
+  # Concurrency from Agent Perspective
+  # ============================================================
+  Scenario: Multiple agents interact concurrently without interference
+    Given 200 concurrent MCP sessions are active
+    When many agents call read-only tools simultaneously
+    Then all calls complete successfully or with appropriate errors
+    And no session can affect another
+    And the server maintains stability and low latency
+
+  # ============================================================
+  # No Mutation Invariant (Public API)
+  # ============================================================
+  Scenario: It is impossible to mutate data or schema through any public tool
+    When any agent attempts any write operation through any tool or the generic executor
+    Then every attempt is rejected at the earliest possible layer
+    And the database state remains unchanged
+    And the rejection is clearly communicated and logged
+    And this holds true even under high concurrency or error conditions
