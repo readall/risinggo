@@ -1,1 +1,91 @@
-Full content of persistence_and_recovery.features
+# language: en
+Feature: Persistence, Recovery, and Resilience
+
+  As an operator
+  I want the MCP server to handle failures gracefully and recover without data loss or corruption
+  So that the system remains reliable even when RisingWave or the server itself experiences issues
+
+  Note: The core server is stateless. "Persistence" here refers to connection state, configuration, in-flight request handling, and recovery mechanisms.
+
+  Background:
+    Given the server is running with connection pooling enabled
+    And detailed observability is active
+
+  # ============================================================
+  # Connection & Pool Recovery (ADR-003)
+  # ============================================================
+  Scenario: Server recovers from transient database disconnections
+    Given the connection pool has active connections
+    When RisingWave becomes temporarily unavailable (network blip, restart)
+    Then the pool detects failed connections
+    And new tool calls either wait for recovery or fail fast with clear errors
+    And successful recovery allows new connections to be established automatically
+    And no data corruption or inconsistent state occurs
+
+  Scenario: Graceful handling of RisingWave failover or restart
+    When RisingWave undergoes planned or unplanned restart
+    Then in-flight read queries may fail with appropriate errors
+    And the server continues to accept new requests
+    And it re-establishes healthy connections once RisingWave is available
+    And pool health checks eventually reflect recovery
+
+  # ============================================================
+  # Graceful Shutdown
+  # ============================================================
+  Scenario: Server shuts down gracefully
+    Given there are active tool calls and open connections
+    When a shutdown signal (SIGTERM) is received
+    Then the server stops accepting new requests
+    And waits for in-flight requests to complete (with timeout)
+    And closes the connection pool cleanly
+    And exits with code 0
+    And all observability signals for shutdown are emitted
+
+  Scenario: Forced shutdown after timeout
+    Given long-running queries are in progress
+    When shutdown is requested and in-flight requests exceed graceful timeout
+    Then remaining requests are cancelled via context
+    And the server shuts down
+    And appropriate warnings are logged
+
+  # ============================================================
+  # Configuration & State Recovery
+  # ============================================================
+  Scenario: Server reloads configuration only on restart (stateless design)
+    Given the server is running with certain pool and timeout settings
+    When configuration environment variables are changed
+    Then running server does not pick up changes dynamically (by design)
+    And restart is required to apply new configuration
+    And this behavior is documented
+
+  # ============================================================
+  # Observability & Metrics Persistence
+  # ============================================================
+  Scenario: Metrics and logs survive server restarts
+    When the server restarts
+    Then previous metrics are not required to be persisted by the server itself
+    And external systems (Prometheus, log aggregation) retain historical data
+    And new server instance starts emitting fresh metrics from zero
+
+  # ============================================================
+  # Failure Scenarios & Recovery
+  # ============================================================
+  Scenario: Server remains stable under connection pool exhaustion
+    Given the pool reaches MaxConns under heavy load
+    When additional tool calls arrive
+    Then they wait (up to acquire timeout) or fail with clear "pool exhausted" error
+    And the server does not crash or leak goroutines
+    And recovery occurs when connections are released
+
+  Scenario: Partial failure in one tool does not affect others
+    When one category of tools experiences errors (e.g., temporary catalog issue)
+    Then other unrelated tools continue to function normally
+    And the failure is isolated and observable
+
+  # ============================================================
+  # Data Safety Invariant During Recovery
+  # ============================================================
+  Scenario: No mutations are possible even during recovery or failure scenarios
+    When the server is recovering from DB issues or shutting down
+    Then it is still impossible for any tool or the generic executor to perform mutations
+    And all safety layers remain active until the process exits
