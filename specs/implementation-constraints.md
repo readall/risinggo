@@ -1,1 +1,1 @@
-Full content of implementation-constraints.md
+Full implementation-constraints.md content

@@ -1,1 +1,1 @@
-Full content of Specification-suite-overview.md from artifacts
+Full Specification Suite Overview content

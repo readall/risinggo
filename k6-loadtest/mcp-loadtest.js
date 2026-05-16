@@ -1,1 +1,1 @@
-Updated with more rejection and schema variation scenarios
+Full updated k6 load test script with separated performance and functional scenarios

@@ -1,1 +1,1 @@
-Updated README explaining the separation
+Full k6 README explaining separation and usage
