@@ -32,11 +32,10 @@ func main() {
 		os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	if err := server.Start(); err != nil {
+	if err := server.Start(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 		os.Exit(1)
 	}
 
-	<-ctx.Done()
-	fmt.Println("Shutting down gracefully...")
+	fmt.Println("Server stopped.")
 }

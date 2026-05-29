@@ -70,3 +70,8 @@ func (p *Pool) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 func (p *Pool) Stats() *pgxpool.Stat {
 	return p.pool.Stat()
 }
+
+// Ping performs a health check against the database.
+func (p *Pool) Ping(ctx context.Context) error {
+	return p.pool.Ping(ctx)
+}

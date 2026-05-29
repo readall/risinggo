@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/readall/risinggo/internal/config"
@@ -23,9 +25,10 @@ type DescribeTableArgs struct {
 }
 
 type Server struct {
-	config    *config.Config
-	pool      *db.Pool
-	mcpServer *mcp.Server
+	config     *config.Config
+	pool       *db.Pool
+	mcpServer  *mcp.Server
+	httpServer *http.Server
 }
 
 func NewServer(cfg *config.Config, pool *db.Pool) *Server {
@@ -223,7 +226,67 @@ func (s *Server) rowsToResult(rows *db.PgxRows) (string, error) {
 	return string(result), nil
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
+	if s.config.Transport == "streamable-http" {
+		return s.startStreamableHTTP(ctx)
+	}
 	fmt.Println("Starting MCP server with stdio transport")
-	return s.mcpServer.Run(context.Background(), &mcp.StdioTransport{})
+	return s.mcpServer.Run(ctx, &mcp.StdioTransport{})
+}
+
+func (s *Server) startStreamableHTTP(ctx context.Context) error {
+	port := s.config.HttpPort
+	if port == 0 {
+		port = 8080
+	}
+	addr := fmt.Sprintf(":%d", port)
+
+	mux := http.NewServeMux()
+
+	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return s.mcpServer
+	}, nil)
+	mux.Handle("/mcp", mcpHandler)
+
+	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/readyz", s.handleReadyz)
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	s.httpServer = srv
+
+	fmt.Printf("Starting MCP server with streamable-http transport on %s (endpoints: /mcp, /healthz, /readyz)\n", addr)
+
+	// Background goroutine to trigger graceful shutdown on ctx cancel
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("healthy"))
+}
+
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := s.pool.Ping(ctx); err != nil {
+		http.Error(w, "not ready: database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ready"))
 }

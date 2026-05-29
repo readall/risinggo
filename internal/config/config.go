@@ -29,7 +29,7 @@ func Load() (*Config, error) {
 	v := viper.New()
 
 	v.SetConfigType("env")
-
+	v.SetEnvPrefix("MCP")
 	v.AutomaticEnv()
 
 	v.SetDefault("READ_ONLY", true)
@@ -44,6 +44,11 @@ func Load() (*Config, error) {
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("METRICS_PORT", 9090)
 	v.SetDefault("ENABLE_METRICS", true)
+
+	// Support alternate env names used in docker-compose (RISINGWAVE_*, bare PORT, MCP_PORT etc)
+	v.BindEnv("DATABASE_URL", "RISINGWAVE_CONNECTION_STR", "DATABASE_URL")
+	v.BindEnv("HTTP_PORT", "MCP_PORT", "HTTP_PORT", "PORT")
+	v.BindEnv("TRANSPORT", "MCP_TRANSPORT", "TRANSPORT")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
