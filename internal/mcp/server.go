@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	mcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -224,6 +225,65 @@ func (s *Server) rowsToResult(rows *db.PgxRows) (string, error) {
 	})
 
 	return string(result), nil
+}
+
+// rowsToText returns a clean, human-readable text table representation of the rows.
+// Useful for AI agents that prefer readable text over raw JSON.
+func (s *Server) rowsToText(rows *db.PgxRows) (string, error) {
+	fieldDescs := rows.FieldDescriptions()
+	columns := make([]string, len(fieldDescs))
+	for i, fd := range fieldDescs {
+		columns[i] = string(fd.Name)
+	}
+
+	var resultRows []map[string]any
+	for rows.Next() {
+		values := make([]any, len(columns))
+		scanArgs := make([]any, len(columns))
+		for i := range values {
+			scanArgs[i] = &values[i]
+		}
+		if err := rows.Scan(scanArgs...); err != nil {
+			return "", fmt.Errorf("failed to scan row: %w", err)
+		}
+		rowMap := make(map[string]any)
+		for i, col := range columns {
+			rowMap[col] = values[i]
+		}
+		resultRows = append(resultRows, rowMap)
+	}
+
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("row iteration error: %w", err)
+	}
+
+	if len(resultRows) == 0 {
+		return "No rows returned.", nil
+	}
+
+	// Simple text table
+	var sb strings.Builder
+	sb.WriteString(strings.Join(columns, " | "))
+	sb.WriteString("\n")
+	sb.WriteString(strings.Repeat("-", len(strings.Join(columns, " | "))))
+	sb.WriteString("\n")
+
+	for _, row := range resultRows {
+		vals := make([]string, len(columns))
+		for i, col := range columns {
+			v := row[col]
+			if v == nil {
+				vals[i] = "NULL"
+			} else {
+				vals[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		sb.WriteString(strings.Join(vals, " | "))
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString(fmt.Sprintf("\n(%d rows)", len(resultRows)))
+	return sb.String(), nil
 }
 
 func (s *Server) Start(ctx context.Context) error {

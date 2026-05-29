@@ -95,8 +95,23 @@ func SanitizeIdentifier(name string) (string, error) {
 	if len(name) > 63 {
 		return "", fmt.Errorf("identifier too long (max 63 chars)")
 	}
-	if !regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`).MatchString(name) {
-		return "", fmt.Errorf("invalid identifier format: %s", name)
+
+	// Support schema.table style (validate each segment)
+	parts := strings.Split(name, ".")
+	for _, part := range parts {
+		if !regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`).MatchString(part) {
+			return "", fmt.Errorf("invalid identifier format: %s", name)
+		}
 	}
+
+	// Basic reserved word protection (common dangerous ones for read-only context)
+	lower := strings.ToLower(name)
+	reserved := []string{"pg_", "information_schema", "pg_catalog"}
+	for _, r := range reserved {
+		if strings.HasPrefix(lower, r) {
+			return "", fmt.Errorf("identifier uses reserved prefix: %s", name)
+		}
+	}
+
 	return name, nil
 }
