@@ -1,0 +1,14 @@
+# Keep docker build context small and secure
+.git
+.gitignore
+*.md
+docs/
+design/
+specs/
+tasks/
+tests/
+k6-loadtest/
+!k6-loadtest/docker-compose*.yml
+.beads/
+.kilo/
+.claude/

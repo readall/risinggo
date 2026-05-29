@@ -246,29 +246,49 @@ func (s *Server) startStreamableHTTP(ctx context.Context) error {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return s.mcpServer
 	}, nil)
+	// NOTE: No auth middleware here. /mcp is currently unauthenticated.
+	// Production deploys must place this behind a reverse proxy / API gateway
+	// or implement auth (see open bead risinggo-uga for API Key support).
 	mux.Handle("/mcp", mcpHandler)
 
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           mux,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 	s.httpServer = srv
 
 	fmt.Printf("Starting MCP server with streamable-http transport on %s (endpoints: /mcp, /healthz, /readyz)\n", addr)
 
-	// Background goroutine to trigger graceful shutdown on ctx cancel
+	shutdownDone := make(chan error, 1)
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
+		shutdownDone <- srv.Shutdown(shutdownCtx)
 	}()
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
+	}
+	// Wait for Shutdown to finish (drain in-flight requests)
+	if shutdownErr := <-shutdownDone; shutdownErr != nil && shutdownErr != context.Canceled {
+		return shutdownErr
+	}
+	return nil
+}
+
+// Shutdown gracefully stops the HTTP server if running (for explicit calls or tests).
+func (s *Server) Shutdown(ctx context.Context) error {
+	if s.httpServer != nil {
+		return s.httpServer.Shutdown(ctx)
 	}
 	return nil
 }

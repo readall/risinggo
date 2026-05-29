@@ -45,10 +45,21 @@ func Load() (*Config, error) {
 	v.SetDefault("METRICS_PORT", 9090)
 	v.SetDefault("ENABLE_METRICS", true)
 
-	// Support alternate env names used in docker-compose (RISINGWAVE_*, bare PORT, MCP_PORT etc)
-	v.BindEnv("DATABASE_URL", "RISINGWAVE_CONNECTION_STR", "DATABASE_URL")
-	v.BindEnv("HTTP_PORT", "MCP_PORT", "HTTP_PORT", "PORT")
-	v.BindEnv("TRANSPORT", "MCP_TRANSPORT", "TRANSPORT")
+	// Support both MCP_ prefixed (docker/k8s convention) and bare envs for all keys.
+	// Special cases for legacy names.
+	v.BindEnv("DATABASE_URL", "DATABASE_URL", "RISINGWAVE_CONNECTION_STR")
+	v.BindEnv("HTTP_PORT", "HTTP_PORT", "PORT", "MCP_PORT")
+	v.BindEnv("TRANSPORT", "TRANSPORT", "MCP_TRANSPORT")
+	v.BindEnv("READ_ONLY", "READ_ONLY", "MCP_READ_ONLY")
+	v.BindEnv("READ_ONLY_MODE", "READ_ONLY_MODE", "MCP_READ_ONLY_MODE")
+	v.BindEnv("DB_MAX_CONNS", "DB_MAX_CONNS", "MCP_DB_MAX_CONNS")
+	v.BindEnv("DB_MIN_CONNS", "DB_MIN_CONNS", "MCP_DB_MIN_CONNS")
+	v.BindEnv("DB_CONN_TIMEOUT", "DB_CONN_TIMEOUT", "MCP_DB_CONN_TIMEOUT")
+	v.BindEnv("QUERY_TIMEOUT", "QUERY_TIMEOUT", "MCP_QUERY_TIMEOUT")
+	v.BindEnv("MAX_ROWS", "MAX_ROWS", "MCP_MAX_ROWS")
+	v.BindEnv("LOG_LEVEL", "LOG_LEVEL", "MCP_LOG_LEVEL")
+	v.BindEnv("METRICS_PORT", "METRICS_PORT", "MCP_METRICS_PORT")
+	v.BindEnv("ENABLE_METRICS", "ENABLE_METRICS", "MCP_ENABLE_METRICS")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
