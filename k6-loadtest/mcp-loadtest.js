@@ -6,7 +6,7 @@ import { Counter, Trend, Rate } from 'k6/metrics';
 // Configuration
 // ============================================================
 const MCP_BASE_URL = __ENV.MCP_BASE_URL || 'http://localhost:8000';
-const MCP_ENDPOINT = `${MCP_BASE_URL}/mcp`;
+const MCP_ENDPOINT = __ENV.MCP_ENDPOINT || `${MCP_BASE_URL}/mcp`;
 
 const VUS = parseInt(__ENV.VUS || '200');
 const DURATION = __ENV.DURATION || '5m';

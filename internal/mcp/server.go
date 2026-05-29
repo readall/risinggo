@@ -254,6 +254,10 @@ func (s *Server) startStreamableHTTP(ctx context.Context) error {
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
 
+	// Lightweight direct JSON-RPC shim for k6/perf harness (bypasses full MCP streamable protocol handshake).
+	// Real AI clients MUST continue using the standard /mcp streamable endpoint.
+	mux.HandleFunc("/mcp-raw", s.handleRawToolCall)
+
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
@@ -309,4 +313,91 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ready"))
+}
+
+// handleRawToolCall is a minimal direct JSON-RPC endpoint for load/performance testing only.
+// It exercises the same safety + query + formatting paths as the real tools but without
+// requiring full MCP streamable initialize / session / SSE negotiation.
+// k6 harness (and future perf tools) should target /mcp-raw instead of /mcp.
+func (s *Server) handleRawToolCall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		JSONRPC string         `json:"jsonrpc"`
+		ID      any            `json:"id"`
+		Method  string         `json:"method"`
+		Params  map[string]any `json:"params"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid json"}`, http.StatusBadRequest)
+		return
+	}
+
+	toolName := ""
+	args := map[string]any{}
+	if p, ok := req.Params["name"].(string); ok {
+		toolName = p
+	}
+	if p, ok := req.Params["arguments"].(map[string]any); ok {
+		args = p
+	}
+
+	var result any
+	var isErr bool
+
+	switch toolName {
+	case "execute_safe_read_query":
+		q, _ := args["query"].(string)
+		validation := safety.ValidateReadOnlyQuery(q, s.config.MaxRows, int(s.config.QueryTimeout.Seconds()))
+		if !validation.Valid {
+			result = map[string]any{"error": validation.Reason}
+			isErr = true
+		} else {
+			rows, err := s.pool.Query(r.Context(), q)
+			if err != nil {
+				result = map[string]any{"error": err.Error()}
+				isErr = true
+			} else {
+				defer rows.Close()
+				resStr, _ := s.rowsToResult(rows)
+				result = json.RawMessage(resStr)
+			}
+		}
+
+	case "show_tables":
+		// Reuse the query from the real handler
+		query := `SELECT schemaname, tablename, tableowner 
+			  FROM pg_tables 
+			  WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+			  ORDER BY schemaname, tablename`
+		rows, err := s.pool.Query(r.Context(), query)
+		if err != nil {
+			result = map[string]any{"error": err.Error()}
+			isErr = true
+		} else {
+			defer rows.Close()
+			resStr, _ := s.rowsToResult(rows)
+			result = json.RawMessage(resStr)
+		}
+
+	default:
+		result = map[string]any{"note": "raw shim executed for " + toolName}
+	}
+
+	resp := map[string]any{
+		"jsonrpc": "2.0",
+		"id":      req.ID,
+		"result":  result,
+	}
+	if isErr {
+		resp["error"] = result
+		delete(resp, "result")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
 }
