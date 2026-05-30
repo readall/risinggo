@@ -23,6 +23,8 @@ type Config struct {
 	LogLevel           string        `mapstructure:"LOG_LEVEL"`
 	MetricsPort        int           `mapstructure:"METRICS_PORT"`
 	EnableMetrics      bool          `mapstructure:"ENABLE_METRICS"`
+	RateLimitRPS       float64       `mapstructure:"RATE_LIMIT_RPS"`
+	RateLimitBurst     int           `mapstructure:"RATE_LIMIT_BURST"`
 }
 
 func Load() (*Config, error) {
@@ -44,6 +46,8 @@ func Load() (*Config, error) {
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("METRICS_PORT", 9090)
 	v.SetDefault("ENABLE_METRICS", true)
+	v.SetDefault("RATE_LIMIT_RPS", 100)
+	v.SetDefault("RATE_LIMIT_BURST", 200)
 
 	// Support both MCP_ prefixed (docker/k8s convention) and bare envs for all keys.
 	// Special cases for legacy names.
@@ -60,6 +64,8 @@ func Load() (*Config, error) {
 	v.BindEnv("LOG_LEVEL", "LOG_LEVEL", "MCP_LOG_LEVEL")
 	v.BindEnv("METRICS_PORT", "METRICS_PORT", "MCP_METRICS_PORT")
 	v.BindEnv("ENABLE_METRICS", "ENABLE_METRICS", "MCP_ENABLE_METRICS")
+	v.BindEnv("RATE_LIMIT_RPS", "RATE_LIMIT_RPS", "MCP_RATE_LIMIT_RPS")
+	v.BindEnv("RATE_LIMIT_BURST", "RATE_LIMIT_BURST", "MCP_RATE_LIMIT_BURST")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
@@ -99,6 +105,13 @@ func (c *Config) Validate() error {
 
 	if c.MaxRows <= 0 {
 		return fmt.Errorf("MAX_ROWS must be positive")
+	}
+
+	if c.RateLimitRPS <= 0 {
+		return fmt.Errorf("RATE_LIMIT_RPS must be positive")
+	}
+	if c.RateLimitBurst < 1 {
+		return fmt.Errorf("RATE_LIMIT_BURST must be at least 1")
 	}
 
 	if c.ReadOnly || c.ReadOnlyMode {
