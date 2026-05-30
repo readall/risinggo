@@ -308,13 +308,16 @@ func (s *Server) startStreamableHTTP(ctx context.Context) error {
 	// Rate limiter (per-IP token bucket) — protects against abuse
 	rl := NewRateLimiter(s.config.RateLimitRPS, s.config.RateLimitBurst)
 
+	// Optional API key auth (enabled only when MCP_API_KEY / API_KEY is set)
+	auth := func(h http.Handler) http.Handler {
+		return AuthMiddleware(s.config.APIKey, h)
+	}
+
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return s.mcpServer
 	}, nil)
-	// NOTE: No auth middleware here. /mcp is currently unauthenticated.
-	// Production deploys must place this behind a reverse proxy / API gateway
-	// or implement auth (see open bead risinggo-uga for API Key support).
-	mux.Handle("/mcp", rl.Middleware(mcpHandler))
+
+	mux.Handle("/mcp", rl.Middleware(auth(mcpHandler)))
 
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/readyz", s.handleReadyz)
@@ -322,7 +325,7 @@ func (s *Server) startStreamableHTTP(ctx context.Context) error {
 	// Lightweight direct JSON-RPC shim for k6/perf harness (bypasses full MCP streamable protocol handshake).
 	// Real AI clients MUST continue using the standard /mcp streamable endpoint.
 	rawHandler := http.HandlerFunc(s.handleRawToolCall)
-	mux.Handle("/mcp-raw", rl.Middleware(rawHandler))
+	mux.Handle("/mcp-raw", rl.Middleware(auth(rawHandler)))
 
 	srv := &http.Server{
 		Addr:              addr,

@@ -25,6 +25,7 @@ type Config struct {
 	EnableMetrics      bool          `mapstructure:"ENABLE_METRICS"`
 	RateLimitRPS       float64       `mapstructure:"RATE_LIMIT_RPS"`
 	RateLimitBurst     int           `mapstructure:"RATE_LIMIT_BURST"`
+	APIKey             string        `mapstructure:"API_KEY"`
 }
 
 func Load() (*Config, error) {
@@ -48,6 +49,7 @@ func Load() (*Config, error) {
 	v.SetDefault("ENABLE_METRICS", true)
 	v.SetDefault("RATE_LIMIT_RPS", 100)
 	v.SetDefault("RATE_LIMIT_BURST", 200)
+	v.SetDefault("API_KEY", "")
 
 	// Support both MCP_ prefixed (docker/k8s convention) and bare envs for all keys.
 	// Special cases for legacy names.
@@ -66,6 +68,7 @@ func Load() (*Config, error) {
 	v.BindEnv("ENABLE_METRICS", "ENABLE_METRICS", "MCP_ENABLE_METRICS")
 	v.BindEnv("RATE_LIMIT_RPS", "RATE_LIMIT_RPS", "MCP_RATE_LIMIT_RPS")
 	v.BindEnv("RATE_LIMIT_BURST", "RATE_LIMIT_BURST", "MCP_RATE_LIMIT_BURST")
+	v.BindEnv("API_KEY", "API_KEY", "MCP_API_KEY")
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
