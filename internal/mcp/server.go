@@ -100,7 +100,7 @@ func (s *Server) handleExecuteQuery(ctx context.Context, req *mcp.CallToolReques
 	}
 	defer rows.Close()
 
-	result, _ := s.rowsToResult(rows)
+	result, _ := s.rowsToText(rows)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -121,7 +121,7 @@ func (s *Server) handleShowTables(ctx context.Context, req *mcp.CallToolRequest,
 	}
 	defer rows.Close()
 
-	result, _ := s.rowsToResult(rows)
+	result, _ := s.rowsToText(rows)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -157,7 +157,7 @@ func (s *Server) handleDescribeTable(ctx context.Context, req *mcp.CallToolReque
 	}
 	defer rows.Close()
 
-	result, _ := s.rowsToResult(rows)
+	result, _ := s.rowsToText(rows)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -181,7 +181,7 @@ func (s *Server) handleListStreamingJobs(ctx context.Context, req *mcp.CallToolR
 	}
 	defer rows.Close()
 
-	result, _ := s.rowsToResult(rows)
+	result, _ := s.rowsToText(rows)
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -190,6 +190,8 @@ func (s *Server) handleListStreamingJobs(ctx context.Context, req *mcp.CallToolR
 	}, nil, nil
 }
 
+// rowsToResult returns structured JSON (used by /mcp-raw and JSON clients).
+// Main MCP handlers use the companion rowsToText() for agent-friendly output.
 func (s *Server) rowsToResult(rows *db.PgxRows) (string, error) {
 	fieldDescs := rows.FieldDescriptions()
 	columns := make([]string, len(fieldDescs))
@@ -227,8 +229,8 @@ func (s *Server) rowsToResult(rows *db.PgxRows) (string, error) {
 	return string(result), nil
 }
 
-// rowsToText returns a clean, human-readable text table representation of the rows.
-// Useful for AI agents that prefer readable text over raw JSON.
+// rowsToText returns a clean, human-readable pipe-delimited text table.
+// Used by all primary MCP tool handlers for excellent AI agent UX.
 func (s *Server) rowsToText(rows *db.PgxRows) (string, error) {
 	fieldDescs := rows.FieldDescriptions()
 	columns := make([]string, len(fieldDescs))
