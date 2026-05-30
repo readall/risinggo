@@ -70,10 +70,16 @@ func TestSanitizeIdentifier(t *testing.T) {
 		{"users", false},
 		{"table_name", false},
 		{"TableName", false},
+		{"public.users", false},
+		{"schema.table_name", false},
 		{"", true},
 		{"123invalid", true},
 		{"table-name", true},
 		{"table name", true},
+		{"pg_catalog.foo", true},
+		{"information_schema.columns", true},
+		{"pg_something", true},
+		{"very_long_identifier_that_exceeds_the_sixty_three_character_limit_12345", true},
 	}
 
 	for _, tt := range tests {
