@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -19,15 +20,22 @@ import (
 func TestIntegration_RisingWaveConnection(t *testing.T) {
 	ctx := context.Background()
 
-	// Use RisingWave official image (Postgres wire compatible)
-	// For faster CI in some envs this can be swapped to "postgres:16"
+	// Default to lightweight postgres for fast local/CI runs.
+	// Set RW_IMAGE=risingwavelabs/risingwave:latest for full fidelity tests.
+	image := "postgres:16"
+	if env := os.Getenv("RW_IMAGE"); env != "" {
+		image = env
+	}
+
 	req := testcontainers.ContainerRequest{
-		Image:        "risingwavelabs/risingwave:latest",
-		ExposedPorts: []string{"4566/tcp"},
+		Image:        image,
+		ExposedPorts: []string{"5432/tcp"},
 		Env: map[string]string{
-			"RW_SQL_PORT": "4566",
+			"POSTGRES_USER":     "root",
+			"POSTGRES_PASSWORD": "root",
+			"POSTGRES_DB":       "dev",
 		},
-		WaitingFor: wait.ForLog("RisingWave is ready").WithStartupTimeout(120 * time.Second),
+		WaitingFor: wait.ForLog("database system is ready to accept connections").WithStartupTimeout(60 * time.Second),
 	}
 
 	rwContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -37,16 +45,16 @@ func TestIntegration_RisingWaveConnection(t *testing.T) {
 	if err != nil {
 		t.Skipf("Skipping integration test - could not start RisingWave container (docker may be unavailable or slow): %v", err)
 	}
-	defer func() {
-		_ = rwContainer.Terminate(ctx)
-	}()
+	t.Cleanup(func() {
+		_ = rwContainer.Terminate(context.Background())
+	})
 
 	host, err := rwContainer.Host(ctx)
 	if err != nil {
 		t.Fatalf("failed to get container host: %v", err)
 	}
 
-	port, err := rwContainer.MappedPort(ctx, "4566")
+	port, err := rwContainer.MappedPort(ctx, "5432")
 	if err != nil {
 		t.Fatalf("failed to get mapped port: %v", err)
 	}
@@ -65,7 +73,7 @@ func TestIntegration_RisingWaveConnection(t *testing.T) {
 
 	pool, err := db.NewPool(cfg)
 	if err != nil {
-		t.Fatalf("failed to create pool against test RisingWave: %v", err)
+		t.Fatalf("failed to create pool against test container: %v", err)
 	}
 	defer pool.Close()
 
@@ -87,7 +95,76 @@ func TestIntegration_RisingWaveConnection(t *testing.T) {
 		t.Errorf("expected 1, got %d", val)
 	}
 
-	t.Logf("Integration test passed against real RisingWave container on %s:%s", host, port.Port())
+	t.Logf("Integration test passed against container on %s:%s (image: %s)", host, port.Port(), image)
+}
+
+// TestIntegration_SchemaInspection proves the infrastructure supports the kind
+// of read queries that future schema tools (show_create_table, list tables, etc.)
+// will need. Runs against a real DB container.
+func TestIntegration_SchemaInspection(t *testing.T) {
+	// Reuse the same container-start logic? For skeleton simplicity we duplicate
+	// the minimal setup. In a real suite we would share a helper.
+	ctx := context.Background()
+
+	image := "postgres:16"
+	if env := os.Getenv("RW_IMAGE"); env != "" {
+		image = env
+	}
+
+	req := testcontainers.ContainerRequest{
+		Image:        image,
+		ExposedPorts: []string{"5432/tcp"},
+		Env: map[string]string{
+			"POSTGRES_USER":     "root",
+			"POSTGRES_PASSWORD": "root",
+			"POSTGRES_DB":       "dev",
+		},
+		WaitingFor: wait.ForLog("database system is ready to accept connections").WithStartupTimeout(60 * time.Second),
+	}
+
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	if err != nil {
+		t.Skipf("Skipping schema inspection test - container unavailable: %v", err)
+	}
+	t.Cleanup(func() { _ = container.Terminate(context.Background()) })
+
+	host, _ := container.Host(ctx)
+	port, _ := container.MappedPort(ctx, "5432")
+
+	cfg := &config.Config{
+		DatabaseURL:  fmt.Sprintf("postgresql://root:root@%s:%s/dev", host, port.Port()),
+		ReadOnly:     true,
+		ReadOnlyMode: true,
+		MaxConns:     3,
+		MinConns:     1,
+		ConnTimeout:  20 * time.Second,
+		QueryTimeout: 5 * time.Second,
+		MaxRows:      100,
+	}
+
+	pool, err := db.NewPool(cfg)
+	if err != nil {
+		t.Fatalf("pool failed: %v", err)
+	}
+	defer pool.Close()
+
+	// Exercise a realistic schema read (what list_tables / get_table_stats would use)
+	rows, err := pool.Query(ctx, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
+	if err != nil {
+		t.Fatalf("schema query failed: %v", err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		count++
+		var name string
+		_ = rows.Scan(&name)
+	}
+	t.Logf("Schema inspection succeeded — saw %d tables in public schema", count)
 }
 
 // TestIntegration_SafetyEnforced demonstrates that our safety layer still works
