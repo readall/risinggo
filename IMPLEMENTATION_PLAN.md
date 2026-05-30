@@ -1,8 +1,12 @@
 # RisingWave MCP Server (Go) — Implementation Plan
 
-**Version**: 1.0  
-**Date**: May 2026  
-**Status**: Ready for Execution
+**Version**: 1.1 (Reality Update)  
+**Date**: 2026-05-30  
+**Status**: Phase 1 Complete — In Phase 2 (P2 beads active)
+
+> **Note (2026-05-30)**: This plan is historically accurate. Several Phase 1 items (structured formatting, input validation, integration tests, list_streaming_jobs) were completed ahead of the original schedule. All P1 beads are now closed. We are actively working the P2 monitoring tools using the live `bd ready` list.
+
+**Live task tracking**: Always use `bd ready`, `bd show <id>`, and `bd update <id> --claim` (see AGENTS.md).
 
 ---
 
@@ -71,6 +75,8 @@ The plan is broken down into small, verifiable units called **"Beads"**. Each be
 | 1.8 | Integration tests with testcontainers | Tools work against real RisingWave | - | High |
 
 **Phase 1 Validation Gate**: Core query and schema tools are functional and remain strictly read-only.
+
+**Reality Update (2026-05-30)**: Phase 1 is **complete**. All listed Phase 1 beads (1.1–1.3, 1.6–1.8 + list_streaming_jobs) have been delivered and closed via the beads system. The server is already safe and useful for agent workloads.
 
 ---
 

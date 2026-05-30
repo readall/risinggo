@@ -16,10 +16,12 @@ It draws high-level inspiration from MCP tooling patterns and the official Model
 
 ## Directory Structure
 
+- `EXAMPLES.md` - Concrete usage examples for AI agents (MCP clients)
 - `design/` - Detailed design document
 - `specs/` - Executable Gherkin specifications
-- `k6-loadtest/` - Load testing harness
-- `tests/` - Go test skeleton
+- `IMPLEMENTATION_PLAN.md` - Bead-by-bead execution plan + current status
+- `k6-loadtest/` - Load testing harness (validated)
+- `tests/` - Go tests (unit + integration with testcontainers)
 
 ## Official RisingWave
 
@@ -30,3 +32,28 @@ This project integrates with the official [RisingWave](https://github.com/rising
 See [EXAMPLES.md](EXAMPLES.md) for concrete prompts, tool usage patterns, safety guarantees, and end-to-end workflows that work great with Claude, Cursor, and other MCP clients.
 
 All tool responses are returned as clean human-readable text tables for the best possible agent experience.
+
+## Current Status (as of 2026-05-30)
+
+**Phase 1 Complete** (Core read-only functionality + safety + agent UX)
+
+Implemented and production-validated:
+- `execute_safe_read_query` — full SQL power with strict read-only enforcement
+- `show_tables`, `describe_table` — schema discovery
+- `list_streaming_jobs` — RisingWave-specific monitoring
+- Structured result formatting (beautiful text tables for agents + JSON for perf clients)
+- Strong identifier sanitization + multi-layer safety
+- Integration test infrastructure (testcontainers + real DB)
+- `/mcp-raw` direct shim for load testing
+- Comprehensive agent usage examples
+
+**Current Focus**: Phase 2 — Monitoring & Advanced Tools (P2 beads)
+
+See `IMPLEMENTATION_PLAN.md` for the full bead-by-bead breakdown and `bd ready` for live task list.
+
+**Quality Gates Passed**:
+- k6 load test (P0) validated at high concurrency
+- All P1 tasks closed
+- Strict bd (beads) tracking + mandatory push discipline
+
+The server is already usable and safe for real AI agent workloads against RisingWave.
