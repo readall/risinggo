@@ -24,3 +24,9 @@ It draws high-level inspiration from MCP tooling patterns and the official Model
 ## Official RisingWave
 
 This project integrates with the official [RisingWave](https://github.com/risingwavelabs/risingwave) database (retained as the upstream project). All references to `risingwavelabs/risingwave` are for compatibility with the official project only.
+
+## For AI Agents
+
+See [EXAMPLES.md](EXAMPLES.md) for concrete prompts, tool usage patterns, safety guarantees, and end-to-end workflows that work great with Claude, Cursor, and other MCP clients.
+
+All tool responses are returned as clean human-readable text tables for the best possible agent experience.
